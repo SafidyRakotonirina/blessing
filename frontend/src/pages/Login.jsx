@@ -138,8 +138,8 @@ export default function Login() {
             <p className="text-xs font-medium text-gray-700 mb-2">
               Compte de démonstration:
             </p>
-            <p className="text-xs text-gray-600">Email: admin@example.com</p>
-            <p className="text-xs text-gray-600">Mot de passe: Admin123!</p>
+            <p className="text-xs text-gray-600">Email: admin@blessing.mg</p>
+            <p className="text-xs text-gray-600">Mot de passe: Admin123</p>
           </div>
         </div>
       </div>

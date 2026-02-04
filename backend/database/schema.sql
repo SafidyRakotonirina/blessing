@@ -217,4 +217,4 @@ INSERT INTO salles (nom, ecole_id, capacite, equipements) VALUES
 
 -- Insertion d'un utilisateur admin par défaut (password: Admin123!)
 INSERT INTO utilisateurs (nom, prenom, email, password, role, telephone) VALUES
-('Admin', '', 'admin@blessing.mg', '$2a$10$X7jCZ8qK4yYHYj0u6K5qF.vZE4dKGH3sBzM4pZLvYhZqH3sZE4dKG', 'admin', '+261 32 12 345 67');
+('Admin', '', 'admin@blessing.mg', '$2b$10$G3WhXaY/bcYXj66CIYGqautSe9WkgcKIkHVgFYWNiZbkQCd8fLW2G', 'admin', '+261 32 12 345 67');
