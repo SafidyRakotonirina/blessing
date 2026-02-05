@@ -1,54 +1,103 @@
 import { pool } from '../config/database.js';
 
 class VagueModel {
-  // Créer une vague
+  // Créer une vague avec horaires multiples
   static async create(vagueData) {
-    const {
-      nom,
-      niveau_id,
-      enseignant_id,
-      salle_id,
-      date_debut,
-      date_fin,
-      horaire_id,
-      jour_id,
-      capacite_max = 20,
-      statut = 'planifie',
-      remarques = null
-    } = vagueData;
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
 
-    const [result] = await pool.execute(
-      `INSERT INTO vagues (nom, niveau_id, enseignant_id, salle_id, date_debut, date_fin, 
-       horaire_id, jour_id, capacite_max, statut, remarques)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nom, niveau_id, enseignant_id, salle_id, date_debut, date_fin, 
-       horaire_id, jour_id, capacite_max, statut, remarques]
-    );
+      const {
+        nom,
+        niveau_id,
+        enseignant_id,
+        salle_id,
+        date_debut,
+        date_fin,
+        statut = 'planifie',
+        remarques = null,
+        horaires = [] // Array de { jour_id, horaire_id }
+      } = vagueData;
 
-    return result.insertId;
+      // Récupérer la capacité de la salle
+      let capacite_max = 20; // Par défaut
+      if (salle_id) {
+        const [salleRows] = await connection.execute(
+          'SELECT capacite FROM salles WHERE id = ?',
+          [salle_id]
+        );
+        if (salleRows.length > 0) {
+          capacite_max = salleRows[0].capacite;
+        }
+      }
+
+      // Créer la vague
+      const [result] = await connection.execute(
+        `INSERT INTO vagues (nom, niveau_id, enseignant_id, salle_id, date_debut, date_fin, capacite_max, statut, remarques)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nom, niveau_id, enseignant_id, salle_id, date_debut, date_fin, capacite_max, statut, remarques]
+      );
+
+      const vagueId = result.insertId;
+
+      // Ajouter les horaires
+      if (horaires && horaires.length > 0) {
+        for (const horaire of horaires) {
+          await connection.execute(
+            `INSERT INTO vague_horaires (vague_id, jour_id, horaire_id)
+             VALUES (?, ?, ?)`,
+            [vagueId, horaire.jour_id, horaire.horaire_id]
+          );
+        }
+      }
+
+      await connection.commit();
+      return vagueId;
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
-  // Trouver une vague par ID avec détails complets
+  // Trouver une vague par ID avec tous les détails
   static async findById(id) {
     const [rows] = await pool.execute(
       `SELECT v.*,
               n.code as niveau_code, n.nom as niveau_nom,
               u.nom as enseignant_nom, u.prenom as enseignant_prenom,
               s.nom as salle_nom, s.capacite as salle_capacite,
-              h.heure_debut, h.heure_fin, h.libelle as horaire_libelle,
-              j.nom as jour_nom,
               (SELECT COUNT(*) FROM inscriptions WHERE vague_id = v.id AND statut = 'actif') as nb_inscrits
        FROM vagues v
        LEFT JOIN niveaux n ON v.niveau_id = n.id
        LEFT JOIN utilisateurs u ON v.enseignant_id = u.id
        LEFT JOIN salles s ON v.salle_id = s.id
-       LEFT JOIN horaires h ON v.horaire_id = h.id
-       LEFT JOIN jours j ON v.jour_id = j.id
        WHERE v.id = ?`,
       [id]
     );
 
-    return rows[0];
+    if (rows.length === 0) return null;
+
+    // Récupérer les horaires de la vague
+    const [horaires] = await pool.execute(
+      `SELECT vh.*, 
+              j.nom as jour_nom, j.ordre as jour_ordre,
+              h.heure_debut, h.heure_fin, h.libelle as horaire_libelle
+       FROM vague_horaires vh
+       JOIN jours j ON vh.jour_id = j.id
+       JOIN horaires h ON vh.horaire_id = h.id
+       WHERE vh.vague_id = ?
+       ORDER BY j.ordre, h.heure_debut`,
+      [id]
+    );
+
+    return {
+      ...rows[0],
+      horaires
+    };
   }
 
   // Obtenir toutes les vagues avec filtres
@@ -58,15 +107,11 @@ class VagueModel {
              n.code as niveau_code, n.nom as niveau_nom,
              u.nom as enseignant_nom, u.prenom as enseignant_prenom,
              s.nom as salle_nom,
-             h.heure_debut, h.heure_fin,
-             j.nom as jour_nom,
              (SELECT COUNT(*) FROM inscriptions WHERE vague_id = v.id AND statut = 'actif') as nb_inscrits
       FROM vagues v
       LEFT JOIN niveaux n ON v.niveau_id = n.id
       LEFT JOIN utilisateurs u ON v.enseignant_id = u.id
       LEFT JOIN salles s ON v.salle_id = s.id
-      LEFT JOIN horaires h ON v.horaire_id = h.id
-      LEFT JOIN jours j ON v.jour_id = j.id
       WHERE 1=1
     `;
     const params = [];
@@ -91,27 +136,11 @@ class VagueModel {
       params.push(filters.salle_id);
     }
 
-    if (filters.jour_id) {
-      query += ' AND v.jour_id = ?';
-      params.push(filters.jour_id);
-    }
-
-    if (filters.date_debut) {
-      query += ' AND v.date_debut >= ?';
-      params.push(filters.date_debut);
-    }
-
-    if (filters.date_fin) {
-      query += ' AND v.date_fin <= ?';
-      params.push(filters.date_fin);
-    }
-
     if (filters.search) {
       query += ' AND v.nom LIKE ?';
       params.push(`%${filters.search}%`);
     }
 
-    // Pagination
     const page = parseInt(filters.page) || 1;
     const limit = parseInt(filters.limit) || 10;
     const offset = (page - 1) * limit;
@@ -120,6 +149,28 @@ class VagueModel {
     params.push(limit, offset);
 
     const [rows] = await pool.execute(query, params);
+
+    // Pour chaque vague, récupérer un résumé des horaires
+    const vaguesAvecHoraires = await Promise.all(
+      rows.map(async (vague) => {
+        const [horaires] = await pool.execute(
+          `SELECT j.nom as jour_nom, h.heure_debut, h.heure_fin
+           FROM vague_horaires vh
+           JOIN jours j ON vh.jour_id = j.id
+           JOIN horaires h ON vh.horaire_id = h.id
+           WHERE vh.vague_id = ?
+           ORDER BY j.ordre, h.heure_debut`,
+          [vague.id]
+        );
+        
+        return {
+          ...vague,
+          horaires_resume: horaires.map(h => 
+            `${h.jour_nom} ${h.heure_debut}-${h.heure_fin}`
+          ).join(', ')
+        };
+      })
+    );
 
     // Compter le total
     let countQuery = 'SELECT COUNT(*) as total FROM vagues v WHERE 1=1';
@@ -135,16 +186,6 @@ class VagueModel {
       countParams.push(filters.niveau_id);
     }
 
-    if (filters.enseignant_id) {
-      countQuery += ' AND v.enseignant_id = ?';
-      countParams.push(filters.enseignant_id);
-    }
-
-    if (filters.salle_id) {
-      countQuery += ' AND v.salle_id = ?';
-      countParams.push(filters.salle_id);
-    }
-
     if (filters.search) {
       countQuery += ' AND v.nom LIKE ?';
       countParams.push(`%${filters.search}%`);
@@ -153,7 +194,7 @@ class VagueModel {
     const [countResult] = await pool.execute(countQuery, countParams);
 
     return {
-      vagues: rows,
+      vagues: vaguesAvecHoraires,
       total: countResult[0].total,
       page,
       limit
@@ -162,28 +203,72 @@ class VagueModel {
 
   // Mettre à jour une vague
   static async update(id, vagueData) {
-    const fields = [];
-    const values = [];
+    const connection = await pool.getConnection();
+    
+    try {
+      await connection.beginTransaction();
 
-    Object.keys(vagueData).forEach(key => {
-      if (vagueData[key] !== undefined && key !== 'id') {
-        fields.push(`${key} = ?`);
-        values.push(vagueData[key]);
+      const { horaires, ...vagueFields } = vagueData;
+
+      // Si la salle change, mettre à jour la capacité
+      if (vagueFields.salle_id) {
+        const [salleRows] = await connection.execute(
+          'SELECT capacite FROM salles WHERE id = ?',
+          [vagueFields.salle_id]
+        );
+        if (salleRows.length > 0) {
+          vagueFields.capacite_max = salleRows[0].capacite;
+        }
       }
-    });
 
-    if (fields.length === 0) {
-      return false;
+      // Mettre à jour les champs de la vague
+      const fields = [];
+      const values = [];
+
+      Object.keys(vagueFields).forEach(key => {
+        if (vagueFields[key] !== undefined && key !== 'id') {
+          fields.push(`${key} = ?`);
+          values.push(vagueFields[key]);
+        }
+      });
+
+      if (fields.length > 0) {
+        values.push(id);
+        await connection.execute(
+          `UPDATE vagues SET ${fields.join(', ')} WHERE id = ?`,
+          values
+        );
+      }
+
+      // Mettre à jour les horaires si fournis
+      if (horaires !== undefined) {
+        // Supprimer les anciens horaires
+        await connection.execute(
+          'DELETE FROM vague_horaires WHERE vague_id = ?',
+          [id]
+        );
+
+        // Ajouter les nouveaux
+        if (horaires.length > 0) {
+          for (const horaire of horaires) {
+            await connection.execute(
+              `INSERT INTO vague_horaires (vague_id, jour_id, horaire_id)
+               VALUES (?, ?, ?)`,
+              [id, horaire.jour_id, horaire.horaire_id]
+            );
+          }
+        }
+      }
+
+      await connection.commit();
+      return true;
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-
-    values.push(id);
-
-    const [result] = await pool.execute(
-      `UPDATE vagues SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
-
-    return result.affectedRows > 0;
   }
 
   // Supprimer une vague
@@ -196,115 +281,28 @@ class VagueModel {
     return result.affectedRows > 0;
   }
 
-  // Changer le statut d'une vague
-  static async updateStatus(id, statut) {
-    const [result] = await pool.execute(
-      'UPDATE vagues SET statut = ? WHERE id = ?',
-      [statut, id]
-    );
-
-    return result.affectedRows > 0;
-  }
-
-  // Vérifier la disponibilité d'une salle
-  static async checkSalleDisponibilite(salleId, jourId, horaireId, excludeVagueId = null) {
-    let query = `
-      SELECT COUNT(*) as count
-      FROM vagues
-      WHERE salle_id = ?
-        AND jour_id = ?
-        AND horaire_id = ?
-        AND statut IN ('planifie', 'en_cours')
-    `;
-
-    const params = [salleId, jourId, horaireId];
-
-    if (excludeVagueId) {
-      query += ' AND id != ?';
-      params.push(excludeVagueId);
-    }
-
-    const [rows] = await pool.execute(query, params);
-
-    return rows[0].count === 0;
-  }
-
   // Vérifier la disponibilité d'un enseignant
   static async checkEnseignantDisponibilite(enseignantId, jourId, horaireId, excludeVagueId = null) {
     let query = `
       SELECT COUNT(*) as count
-      FROM vagues
-      WHERE enseignant_id = ?
-        AND jour_id = ?
-        AND horaire_id = ?
-        AND statut IN ('planifie', 'en_cours')
+      FROM vague_horaires vh
+      JOIN vagues v ON vh.vague_id = v.id
+      WHERE v.enseignant_id = ?
+        AND vh.jour_id = ?
+        AND vh.horaire_id = ?
+        AND v.statut IN ('planifie', 'en_cours')
     `;
 
     const params = [enseignantId, jourId, horaireId];
 
     if (excludeVagueId) {
-      query += ' AND id != ?';
+      query += ' AND v.id != ?';
       params.push(excludeVagueId);
     }
 
     const [rows] = await pool.execute(query, params);
 
     return rows[0].count === 0;
-  }
-
-  // Obtenir les étudiants d'une vague
-  static async getEtudiants(vagueId) {
-    const [rows] = await pool.execute(
-      `SELECT u.id, u.nom, u.prenom, u.email, u.telephone, u.photo_url,
-              i.date_inscription, i.statut as statut_inscription,
-              e.montant_total, e.montant_paye, e.montant_restant, e.statut as statut_paiement
-       FROM inscriptions i
-       JOIN utilisateurs u ON i.etudiant_id = u.id
-       LEFT JOIN ecolages e ON i.id = e.inscription_id
-       WHERE i.vague_id = ?
-       ORDER BY i.date_inscription DESC`,
-      [vagueId]
-    );
-
-    return rows;
-  }
-
-  // Obtenir le planning hebdomadaire
-  static async getPlanning(filters = {}) {
-    let query = `
-      SELECT v.id, v.nom, v.statut,
-             n.code as niveau_code,
-             u.nom as enseignant_nom, u.prenom as enseignant_prenom,
-             s.nom as salle_nom,
-             h.id as horaire_id, h.heure_debut, h.heure_fin, h.libelle as horaire_libelle,
-             j.id as jour_id, j.nom as jour_nom, j.ordre as jour_ordre,
-             (SELECT COUNT(*) FROM inscriptions WHERE vague_id = v.id AND statut = 'actif') as nb_inscrits,
-             v.capacite_max
-      FROM vagues v
-      LEFT JOIN niveaux n ON v.niveau_id = n.id
-      LEFT JOIN utilisateurs u ON v.enseignant_id = u.id
-      LEFT JOIN salles s ON v.salle_id = s.id
-      LEFT JOIN horaires h ON v.horaire_id = h.id
-      LEFT JOIN jours j ON v.jour_id = j.id
-      WHERE v.statut IN ('planifie', 'en_cours')
-    `;
-
-    const params = [];
-
-    if (filters.salle_id) {
-      query += ' AND v.salle_id = ?';
-      params.push(filters.salle_id);
-    }
-
-    if (filters.enseignant_id) {
-      query += ' AND v.enseignant_id = ?';
-      params.push(filters.enseignant_id);
-    }
-
-    query += ' ORDER BY j.ordre, h.heure_debut';
-
-    const [rows] = await pool.execute(query, params);
-    return rows;
   }
 
   // Vérifier la capacité d'une vague
@@ -320,6 +318,60 @@ class VagueModel {
     if (rows.length === 0) return false;
 
     return rows[0].nb_inscrits < rows[0].capacite_max;
+  }
+
+  // Obtenir le planning complet
+  static async getPlanning(filters = {}) {
+    let query = `
+      SELECT v.id, v.nom, v.statut, v.capacite_max,
+             n.code as niveau_code,
+             u.nom as enseignant_nom, u.prenom as enseignant_prenom,
+             s.nom as salle_nom,
+             (SELECT COUNT(*) FROM inscriptions WHERE vague_id = v.id AND statut = 'actif') as nb_inscrits
+      FROM vagues v
+      LEFT JOIN niveaux n ON v.niveau_id = n.id
+      LEFT JOIN utilisateurs u ON v.enseignant_id = u.id
+      LEFT JOIN salles s ON v.salle_id = s.id
+      WHERE v.statut IN ('planifie', 'en_cours')
+    `;
+
+    const params = [];
+
+    if (filters.salle_id) {
+      query += ' AND v.salle_id = ?';
+      params.push(filters.salle_id);
+    }
+
+    if (filters.enseignant_id) {
+      query += ' AND v.enseignant_id = ?';
+      params.push(filters.enseignant_id);
+    }
+
+    const [vagues] = await pool.execute(query, params);
+
+    // Pour chaque vague, récupérer ses horaires
+    const vaguesAvecHoraires = await Promise.all(
+      vagues.map(async (vague) => {
+        const [horaires] = await pool.execute(
+          `SELECT vh.*, 
+                  j.nom as jour_nom, j.ordre as jour_ordre,
+                  h.heure_debut, h.heure_fin, h.libelle as horaire_libelle
+           FROM vague_horaires vh
+           JOIN jours j ON vh.jour_id = j.id
+           JOIN horaires h ON vh.horaire_id = h.id
+           WHERE vh.vague_id = ?
+           ORDER BY j.ordre, h.heure_debut`,
+          [vague.id]
+        );
+        
+        return {
+          ...vague,
+          horaires
+        };
+      })
+    );
+
+    return vaguesAvecHoraires;
   }
 }
 

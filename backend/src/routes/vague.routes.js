@@ -5,16 +5,9 @@ import {
   createVague,
   updateVague,
   deleteVague,
-  updateVagueStatus,
-  getVagueEtudiants,
-  getPlanning
+  getPlanning,
+  getPlanningEnseignant
 } from '../controllers/vague.controller.js';
-import {
-  createVagueValidator,
-  updateVagueValidator,
-  updateVagueStatusValidator,
-  vagueIdValidator
-} from '../validators/vague.validator.js';
 import { authenticate, isAdminOrSecretaire } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -25,13 +18,14 @@ router.use(authenticate);
 // Routes générales
 router.get('/', getVagues);
 router.get('/planning', getPlanning);
-router.get('/:id', vagueIdValidator, getVagueById);
-router.get('/:id/etudiants', vagueIdValidator, getVagueEtudiants);
+router.get('/:id', getVagueById);
+
+// Planning d'un enseignant
+router.get('/enseignant/:enseignantId/planning', getPlanningEnseignant);
 
 // Routes protégées (admin/secrétaire uniquement)
-router.post('/', isAdminOrSecretaire, createVagueValidator, createVague);
-router.put('/:id', isAdminOrSecretaire, updateVagueValidator, updateVague);
-router.delete('/:id', isAdminOrSecretaire, vagueIdValidator, deleteVague);
-router.patch('/:id/statut', isAdminOrSecretaire, updateVagueStatusValidator, updateVagueStatus);
+router.post('/', isAdminOrSecretaire, createVague);
+router.put('/:id', isAdminOrSecretaire, updateVague);
+router.delete('/:id', isAdminOrSecretaire, deleteVague);
 
 export default router;
