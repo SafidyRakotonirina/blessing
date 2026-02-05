@@ -1,5 +1,5 @@
-import { pool } from '../config/database.js';
-import bcrypt from 'bcryptjs';
+import bcrypt from "bcryptjs";
+import { pool } from "../config/database.js";
 
 class UserModel {
   // Créer un utilisateur
@@ -10,9 +10,9 @@ class UserModel {
       email,
       telephone,
       password,
-      role = 'etudiant',
+      role = "etudiant",
       google_id = null,
-      photo_url = null
+      photo_url = null,
     } = userData;
 
     let hashedPassword = null;
@@ -23,7 +23,16 @@ class UserModel {
     const [result] = await pool.execute(
       `INSERT INTO utilisateurs (nom, prenom, email, telephone, password, role, google_id, photo_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nom, prenom, email, telephone, hashedPassword, role, google_id, photo_url]
+      [
+        nom,
+        prenom,
+        email || null,
+        telephone,
+        hashedPassword,
+        role,
+        google_id || null,
+        photo_url || null,
+      ],
     );
 
     return result.insertId;
@@ -32,8 +41,8 @@ class UserModel {
   // Trouver un utilisateur par email
   static async findByEmail(email) {
     const [rows] = await pool.execute(
-      'SELECT * FROM utilisateurs WHERE email = ?',
-      [email]
+      "SELECT * FROM utilisateurs WHERE email = ?",
+      [email],
     );
     return rows[0];
   }
@@ -41,8 +50,8 @@ class UserModel {
   // Trouver un utilisateur par ID
   static async findById(id) {
     const [rows] = await pool.execute(
-      'SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at FROM utilisateurs WHERE id = ?',
-      [id]
+      "SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at FROM utilisateurs WHERE id = ?",
+      [id],
     );
     return rows[0];
   }
@@ -50,8 +59,8 @@ class UserModel {
   // Trouver un utilisateur par Google ID
   static async findByGoogleId(googleId) {
     const [rows] = await pool.execute(
-      'SELECT * FROM utilisateurs WHERE google_id = ?',
-      [googleId]
+      "SELECT * FROM utilisateurs WHERE google_id = ?",
+      [googleId],
     );
     return rows[0];
   }
@@ -66,17 +75,17 @@ class UserModel {
     const params = [];
 
     if (filters.role) {
-      query += ' AND role = ?';
+      query += " AND role = ?";
       params.push(filters.role);
     }
 
     if (filters.actif !== undefined) {
-      query += ' AND actif = ?';
+      query += " AND actif = ?";
       params.push(filters.actif);
     }
 
     if (filters.search) {
-      query += ' AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)';
+      query += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
       const searchTerm = `%${filters.search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -86,27 +95,27 @@ class UserModel {
     const limit = parseInt(filters.limit) || 10;
     const offset = (page - 1) * limit;
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
     const [rows] = await pool.execute(query, params);
 
     // Compter le total
-    let countQuery = 'SELECT COUNT(*) as total FROM utilisateurs WHERE 1=1';
+    let countQuery = "SELECT COUNT(*) as total FROM utilisateurs WHERE 1=1";
     const countParams = [];
 
     if (filters.role) {
-      countQuery += ' AND role = ?';
+      countQuery += " AND role = ?";
       countParams.push(filters.role);
     }
 
     if (filters.actif !== undefined) {
-      countQuery += ' AND actif = ?';
+      countQuery += " AND actif = ?";
       countParams.push(filters.actif);
     }
 
     if (filters.search) {
-      countQuery += ' AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)';
+      countQuery += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
       const searchTerm = `%${filters.search}%`;
       countParams.push(searchTerm, searchTerm, searchTerm);
     }
@@ -117,7 +126,7 @@ class UserModel {
       users: rows,
       total: countResult[0].total,
       page,
-      limit
+      limit,
     };
   }
 
@@ -126,8 +135,8 @@ class UserModel {
     const fields = [];
     const values = [];
 
-    Object.keys(userData).forEach(key => {
-      if (userData[key] !== undefined && key !== 'password' && key !== 'id') {
+    Object.keys(userData).forEach((key) => {
+      if (userData[key] !== undefined && key !== "password" && key !== "id") {
         fields.push(`${key} = ?`);
         values.push(userData[key]);
       }
@@ -140,8 +149,8 @@ class UserModel {
     values.push(id);
 
     const [result] = await pool.execute(
-      `UPDATE utilisateurs SET ${fields.join(', ')} WHERE id = ?`,
-      values
+      `UPDATE utilisateurs SET ${fields.join(", ")} WHERE id = ?`,
+      values,
     );
 
     return result.affectedRows > 0;
@@ -152,8 +161,8 @@ class UserModel {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     const [result] = await pool.execute(
-      'UPDATE utilisateurs SET password = ? WHERE id = ?',
-      [hashedPassword, id]
+      "UPDATE utilisateurs SET password = ? WHERE id = ?",
+      [hashedPassword, id],
     );
 
     return result.affectedRows > 0;
@@ -162,8 +171,8 @@ class UserModel {
   // Désactiver un utilisateur (soft delete)
   static async deactivate(id) {
     const [result] = await pool.execute(
-      'UPDATE utilisateurs SET actif = FALSE WHERE id = ?',
-      [id]
+      "UPDATE utilisateurs SET actif = FALSE WHERE id = ?",
+      [id],
     );
 
     return result.affectedRows > 0;
@@ -172,8 +181,8 @@ class UserModel {
   // Activer/désactiver un utilisateur
   static async toggleActive(id) {
     const [result] = await pool.execute(
-      'UPDATE utilisateurs SET actif = NOT actif WHERE id = ?',
-      [id]
+      "UPDATE utilisateurs SET actif = NOT actif WHERE id = ?",
+      [id],
     );
 
     return result.affectedRows > 0;
@@ -182,8 +191,8 @@ class UserModel {
   // Supprimer un utilisateur (hard delete - à utiliser avec précaution)
   static async delete(id) {
     const [result] = await pool.execute(
-      'DELETE FROM utilisateurs WHERE id = ?',
-      [id]
+      "DELETE FROM utilisateurs WHERE id = ?",
+      [id],
     );
 
     return result.affectedRows > 0;
@@ -192,8 +201,8 @@ class UserModel {
   // Enregistrer le refresh token
   static async saveRefreshToken(id, refreshToken) {
     const [result] = await pool.execute(
-      'UPDATE utilisateurs SET refresh_token = ? WHERE id = ?',
-      [refreshToken, id]
+      "UPDATE utilisateurs SET refresh_token = ? WHERE id = ?",
+      [refreshToken, id],
     );
 
     return result.affectedRows > 0;
@@ -202,8 +211,8 @@ class UserModel {
   // Supprimer le refresh token
   static async removeRefreshToken(id) {
     const [result] = await pool.execute(
-      'UPDATE utilisateurs SET refresh_token = NULL WHERE id = ?',
-      [id]
+      "UPDATE utilisateurs SET refresh_token = NULL WHERE id = ?",
+      [id],
     );
 
     return result.affectedRows > 0;
@@ -212,8 +221,8 @@ class UserModel {
   // Vérifier le refresh token
   static async verifyRefreshToken(id, refreshToken) {
     const [rows] = await pool.execute(
-      'SELECT refresh_token FROM utilisateurs WHERE id = ? AND refresh_token = ?',
-      [id, refreshToken]
+      "SELECT refresh_token FROM utilisateurs WHERE id = ? AND refresh_token = ?",
+      [id, refreshToken],
     );
 
     return rows.length > 0;
@@ -257,11 +266,11 @@ class UserModel {
     const params = [jourId, horaireId];
 
     if (excludeVagueId) {
-      query += ' AND v.id != ?';
+      query += " AND v.id != ?";
       params.push(excludeVagueId);
     }
 
-    query += ')';
+    query += ")";
 
     const [rows] = await pool.execute(query, params);
     return rows;

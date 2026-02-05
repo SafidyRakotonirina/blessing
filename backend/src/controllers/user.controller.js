@@ -1,6 +1,10 @@
-import UserModel from '../models/user.model.js';
-import { successResponse, errorResponse, paginatedResponse } from '../utils/response.js';
-import { asyncHandler } from '../utils/response.js';
+import UserModel from "../models/user.model.js";
+import {
+  asyncHandler,
+  errorResponse,
+  paginatedResponse,
+  successResponse,
+} from "../utils/response.js";
 
 // Obtenir tous les utilisateurs
 export const getUsers = asyncHandler(async (req, res) => {
@@ -9,7 +13,7 @@ export const getUsers = asyncHandler(async (req, res) => {
     actif: req.query.actif,
     search: req.query.search,
     page: req.query.page || 1,
-    limit: req.query.limit || 10
+    limit: req.query.limit || 10,
   };
 
   const result = await UserModel.findAll(filters);
@@ -20,7 +24,7 @@ export const getUsers = asyncHandler(async (req, res) => {
     result.page,
     result.limit,
     result.total,
-    'Liste des utilisateurs récupérée avec succès'
+    "Liste des utilisateurs récupérée avec succès",
   );
 });
 
@@ -28,7 +32,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 export const getUserStats = asyncHandler(async (req, res) => {
   const stats = await UserModel.getStats();
 
-  return successResponse(res, stats, 'Statistiques récupérées avec succès');
+  return successResponse(res, stats, "Statistiques récupérées avec succès");
 });
 
 // Obtenir un utilisateur par ID
@@ -38,10 +42,10 @@ export const getUserById = asyncHandler(async (req, res) => {
   const user = await UserModel.findById(id);
 
   if (!user) {
-    return errorResponse(res, 'Utilisateur introuvable', 404);
+    return errorResponse(res, "Utilisateur introuvable", 404);
   }
 
-  return successResponse(res, user, 'Utilisateur récupéré avec succès');
+  return successResponse(res, user, "Utilisateur récupéré avec succès");
 });
 
 // Créer un utilisateur
@@ -49,10 +53,10 @@ export const createUser = asyncHandler(async (req, res) => {
   const { nom, prenom, email, telephone, password, role } = req.body;
 
   // Vérifier si l'email existe déjà
-  const existingUser = await UserModel.findByEmail(email);
+  /* const existingUser = await UserModel.findByEmail(email);
   if (existingUser) {
     return errorResponse(res, 'Cet email est déjà utilisé', 409);
-  }
+  } */
 
   // Créer l'utilisateur
   const userId = await UserModel.create({
@@ -61,12 +65,12 @@ export const createUser = asyncHandler(async (req, res) => {
     email,
     telephone,
     password,
-    role
+    role,
   });
 
   const user = await UserModel.findById(userId);
 
-  return successResponse(res, user, 'Utilisateur créé avec succès', 201);
+  return successResponse(res, user, "Utilisateur créé avec succès", 201);
 });
 
 // Mettre à jour un utilisateur
@@ -77,14 +81,14 @@ export const updateUser = asyncHandler(async (req, res) => {
   // Vérifier si l'utilisateur existe
   const existingUser = await UserModel.findById(id);
   if (!existingUser) {
-    return errorResponse(res, 'Utilisateur introuvable', 404);
+    return errorResponse(res, "Utilisateur introuvable", 404);
   }
 
   // Vérifier si le nouvel email est déjà utilisé par un autre utilisateur
   if (email && email !== existingUser.email) {
     const emailUser = await UserModel.findByEmail(email);
     if (emailUser) {
-      return errorResponse(res, 'Cet email est déjà utilisé', 409);
+      return errorResponse(res, "Cet email est déjà utilisé", 409);
     }
   }
 
@@ -99,12 +103,12 @@ export const updateUser = asyncHandler(async (req, res) => {
   const updated = await UserModel.update(id, updateData);
 
   if (!updated) {
-    return errorResponse(res, 'Erreur lors de la mise à jour', 400);
+    return errorResponse(res, "Erreur lors de la mise à jour", 400);
   }
 
   const user = await UserModel.findById(id);
 
-  return successResponse(res, user, 'Utilisateur mis à jour avec succès');
+  return successResponse(res, user, "Utilisateur mis à jour avec succès");
 });
 
 // Désactiver un utilisateur
@@ -114,21 +118,25 @@ export const deleteUser = asyncHandler(async (req, res) => {
   // Vérifier si l'utilisateur existe
   const user = await UserModel.findById(id);
   if (!user) {
-    return errorResponse(res, 'Utilisateur introuvable', 404);
+    return errorResponse(res, "Utilisateur introuvable", 404);
   }
 
   // Empêcher la suppression de son propre compte
   if (parseInt(id) === req.user.id) {
-    return errorResponse(res, 'Vous ne pouvez pas désactiver votre propre compte', 400);
+    return errorResponse(
+      res,
+      "Vous ne pouvez pas désactiver votre propre compte",
+      400,
+    );
   }
 
   const deleted = await UserModel.deactivate(id);
 
   if (!deleted) {
-    return errorResponse(res, 'Erreur lors de la désactivation', 400);
+    return errorResponse(res, "Erreur lors de la désactivation", 400);
   }
 
-  return successResponse(res, null, 'Utilisateur désactivé avec succès');
+  return successResponse(res, null, "Utilisateur désactivé avec succès");
 });
 
 // Activer/désactiver un utilisateur
@@ -138,18 +146,22 @@ export const toggleUserActive = asyncHandler(async (req, res) => {
   // Vérifier si l'utilisateur existe
   const user = await UserModel.findById(id);
   if (!user) {
-    return errorResponse(res, 'Utilisateur introuvable', 404);
+    return errorResponse(res, "Utilisateur introuvable", 404);
   }
 
   // Empêcher la modification de son propre compte
   if (parseInt(id) === req.user.id) {
-    return errorResponse(res, 'Vous ne pouvez pas modifier le statut de votre propre compte', 400);
+    return errorResponse(
+      res,
+      "Vous ne pouvez pas modifier le statut de votre propre compte",
+      400,
+    );
   }
 
   const toggled = await UserModel.toggleActive(id);
 
   if (!toggled) {
-    return errorResponse(res, 'Erreur lors du changement de statut', 400);
+    return errorResponse(res, "Erreur lors du changement de statut", 400);
   }
 
   const updatedUser = await UserModel.findById(id);
@@ -157,22 +169,28 @@ export const toggleUserActive = asyncHandler(async (req, res) => {
   return successResponse(
     res,
     updatedUser,
-    updatedUser.actif ? 'Utilisateur activé avec succès' : 'Utilisateur désactivé avec succès'
+    updatedUser.actif
+      ? "Utilisateur activé avec succès"
+      : "Utilisateur désactivé avec succès",
   );
 });
 
 // Obtenir la liste des professeurs
 export const getProfesseurs = asyncHandler(async (req, res) => {
   const filters = {
-    role: 'enseignant',
+    role: "enseignant",
     actif: true,
     page: 1,
-    limit: 1000
+    limit: 1000,
   };
 
   const result = await UserModel.findAll(filters);
 
-  return successResponse(res, result.users, 'Liste des enseignants récupérée avec succès');
+  return successResponse(
+    res,
+    result.users,
+    "Liste des enseignants récupérée avec succès",
+  );
 });
 
 // Obtenir les enseignants disponibles
@@ -180,14 +198,22 @@ export const getAvailableTeachers = asyncHandler(async (req, res) => {
   const { jourId, horaireId, excludeVagueId } = req.query;
 
   if (!jourId || !horaireId) {
-    return errorResponse(res, 'Les paramètres jourId et horaireId sont requis', 400);
+    return errorResponse(
+      res,
+      "Les paramètres jourId et horaireId sont requis",
+      400,
+    );
   }
 
   const teachers = await UserModel.getAvailableTeachers(
     jourId,
     horaireId,
-    excludeVagueId || null
+    excludeVagueId || null,
   );
 
-  return successResponse(res, teachers, 'Enseignants disponibles récupérés avec succès');
+  return successResponse(
+    res,
+    teachers,
+    "Enseignants disponibles récupérés avec succès",
+  );
 });

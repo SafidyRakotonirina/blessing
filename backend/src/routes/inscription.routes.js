@@ -1,9 +1,10 @@
 import express from 'express';
 import {
-  inscrireEtudiant,
-  retirerEtudiant,
+  createInscriptionComplete,
+  getInscriptionDetails,
   getInscriptionsByEtudiant,
-  updateInscriptionStatus,
+  addPaiement,
+  updateLivreStatut,
   getInscriptionStats
 } from '../controllers/inscription.controller.js';
 import { authenticate, isAdminOrSecretaire } from '../middleware/auth.middleware.js';
@@ -14,10 +15,11 @@ const router = express.Router();
 router.use(authenticate);
 
 // Routes protégées (admin/secrétaire uniquement)
-router.post('/', isAdminOrSecretaire, inscrireEtudiant);
-router.delete('/:vagueId/:etudiantId', isAdminOrSecretaire, retirerEtudiant);
-router.patch('/:id/statut', isAdminOrSecretaire, updateInscriptionStatus);
+router.post('/direct', isAdminOrSecretaire, createInscriptionComplete);
 router.get('/stats', isAdminOrSecretaire, getInscriptionStats);
+router.get('/:id', getInscriptionDetails);
+router.post('/paiements', isAdminOrSecretaire, addPaiement);
+router.patch('/:inscriptionId/livres/:numeroLivre', isAdminOrSecretaire, updateLivreStatut);
 
 // Route accessible par les étudiants pour leurs propres inscriptions
 router.get('/student/:id', getInscriptionsByEtudiant);
