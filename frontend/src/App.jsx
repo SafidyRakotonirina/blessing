@@ -1,13 +1,14 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from './store';
-import Layout from './components/layout/Layout';
-import ProtectedRoute from './components/ProtectedRoute';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Users from './pages/Users';
-import Vagues from './pages/Vagues';
-import Niveaux from './pages/Niveaux';
-import Planning from './pages/Planning';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuthStore } from "./store";
+import Layout from "./components/layout/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Users from "./pages/Users";
+import Vagues from "./pages/Vagues";
+import Niveaux from "./pages/Niveaux";
+import Planning from "./pages/Planning";
+import InscriptionEtudiant from "./pages/auth/InscriptionEtudiant";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -16,10 +17,12 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Public routes */}
-        <Route 
-          path="/login" 
-          element={isAuthenticated ? <Navigate to="/" replace /> : <Login />} 
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
         />
+
+        <Route path="/inscription-etudiant" element={<InscriptionEtudiant />} />
 
         {/* Protected routes */}
         <Route
@@ -30,37 +33,37 @@ function App() {
           }
         >
           <Route path="/" element={<Dashboard />} />
-          <Route 
-            path="/users" 
+          <Route
+            path="/users"
             element={
-              <ProtectedRoute roles={['admin', 'secretaire']}>
+              <ProtectedRoute roles={["admin", "secretaire"]}>
                 <Users />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/vagues" 
+          <Route
+            path="/vagues"
             element={
-              <ProtectedRoute roles={['admin', 'secretaire', 'enseignant']}>
+              <ProtectedRoute roles={["admin", "secretaire", "enseignant"]}>
                 <Vagues />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/niveaux" 
+          <Route
+            path="/niveaux"
             element={
-              <ProtectedRoute roles={['admin', 'secretaire']}>
+              <ProtectedRoute roles={["admin", "secretaire"]}>
                 <Niveaux />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/planning" 
+          <Route
+            path="/planning"
             element={
-              <ProtectedRoute roles={['admin', 'secretaire', 'enseignant']}>
+              <ProtectedRoute roles={["admin", "secretaire", "enseignant"]}>
                 <Planning />
               </ProtectedRoute>
-            } 
+            }
           />
         </Route>
 

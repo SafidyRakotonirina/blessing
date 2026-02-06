@@ -68,10 +68,10 @@ class UserModel {
   // Obtenir tous les utilisateurs avec filtres
   static async findAll(filters = {}) {
     let query = `
-      SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at
-      FROM utilisateurs
-      WHERE 1=1
-    `;
+    SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at
+    FROM utilisateurs
+    WHERE 1=1
+  `;
     const params = [];
 
     if (filters.role) {
@@ -79,10 +79,11 @@ class UserModel {
       params.push(filters.role);
     }
 
-    if (filters.actif !== undefined) {
-      query += " AND actif = ?";
-      params.push(filters.actif);
-    }
+    if (filters.actif === 'true' || filters.actif === 'false') {
+  const actifValue = filters.actif === 'true' ? 1 : 0;
+  query += " AND actif = ?";
+  params.push(actifValue);
+}
 
     if (filters.search) {
       query += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
@@ -91,43 +92,47 @@ class UserModel {
     }
 
     // Pagination
-    const page = parseInt(filters.page) || 1;
-    const limit = parseInt(filters.limit) || 10;
+    const page = Math.max(1, Number(filters.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
     const offset = (page - 1) * limit;
 
-    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
-    params.push(limit, offset);
+    query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
-    const [rows] = await pool.execute(query, params);
+    try {
+      const [rows] = await pool.execute(query, params);
 
-    // Compter le total
-    let countQuery = "SELECT COUNT(*) as total FROM utilisateurs WHERE 1=1";
-    const countParams = [];
+      // Compter le total
+      let countQuery = "SELECT COUNT(*) as total FROM utilisateurs WHERE 1=1";
+      const countParams = [];
 
-    if (filters.role) {
-      countQuery += " AND role = ?";
-      countParams.push(filters.role);
+      if (filters.role) {
+        countQuery += " AND role = ?";
+        countParams.push(filters.role);
+      }
+
+      if (filters.actif !== undefined) {
+        countQuery += " AND actif = ?";
+        countParams.push(filters.actif);
+      }
+
+      if (filters.search) {
+        countQuery += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
+        const searchTerm = `%${filters.search}%`;
+        countParams.push(searchTerm, searchTerm, searchTerm);
+      }
+
+      const [countResult] = await pool.execute(countQuery, countParams);
+
+      return {
+        users: rows,
+        total: countResult[0].total,
+        page,
+        limit,
+      };
+    } catch (err) {
+      console.error("Erreur dans UserModel.findAll:", err);
+      throw err;
     }
-
-    if (filters.actif !== undefined) {
-      countQuery += " AND actif = ?";
-      countParams.push(filters.actif);
-    }
-
-    if (filters.search) {
-      countQuery += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
-      const searchTerm = `%${filters.search}%`;
-      countParams.push(searchTerm, searchTerm, searchTerm);
-    }
-
-    const [countResult] = await pool.execute(countQuery, countParams);
-
-    return {
-      users: rows,
-      total: countResult[0].total,
-      page,
-      limit,
-    };
   }
 
   // Mettre à jour un utilisateur

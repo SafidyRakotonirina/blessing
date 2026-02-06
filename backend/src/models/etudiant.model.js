@@ -58,14 +58,17 @@ class EtudiantModel {
     query += ' GROUP BY e.id';
 
     // Pagination
-    const page = parseInt(filters.page) || 1;
-    const limit = parseInt(filters.limit) || 10;
-    const offset = (page - 1) * limit;
+    const page  = Math.max(1, Number(filters.page)  || 1);
+const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
+const offset = (page - 1) * limit;
 
-    query += ' ORDER BY e.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
+   query += ` ORDER BY v.date_debut DESC LIMIT ${limit} OFFSET ${offset}`;
 
-    const [rows] = await pool.execute(query, params);
+// Debug temporaire
+console.log("[VAGUE] QUERY finale:", query);
+console.log("[VAGUE] PARAMS (sans limit/offset):", params);
+
+const [rows] = await pool.execute(query, params);
 
     // Compter le total
     let countQuery = 'SELECT COUNT(*) as total FROM etudiants e WHERE 1=1';

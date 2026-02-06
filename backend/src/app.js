@@ -21,8 +21,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes par défaut
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // 100 requêtes par défaut
+  windowMs:
+    process.env.NODE_ENV === "development"
+      ? 1000 * 60 // 1 minute en dev
+      : parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max:
+    process.env.NODE_ENV === "development"
+      ? 10000 // 10 000 requêtes par minute → quasi illimité
+      : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   message: {
     success: false,
     message: "Trop de requêtes, veuillez réessayer plus tard",
