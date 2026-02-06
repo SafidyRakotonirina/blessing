@@ -9,6 +9,8 @@ import Vagues from "./pages/Vagues";
 import Niveaux from "./pages/Niveaux";
 import Planning from "./pages/Planning";
 import InscriptionEtudiant from "./pages/auth/InscriptionEtudiant";
+import Salles from "./pages/Salles";
+import RegisterSuccess from "./pages/RegisterSuccess";
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -23,6 +25,8 @@ function App() {
         />
 
         <Route path="/inscription-etudiant" element={<InscriptionEtudiant />} />
+
+        <Route path="/register-success" element={<RegisterSuccess />} />
 
         {/* Protected routes */}
         <Route
@@ -62,6 +66,14 @@ function App() {
             element={
               <ProtectedRoute roles={["admin", "secretaire", "enseignant"]}>
                 <Planning />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/salles"
+            element={
+              <ProtectedRoute roles={["admin", "secretaire", "enseignant"]}>
+                <Salles />
               </ProtectedRoute>
             }
           />

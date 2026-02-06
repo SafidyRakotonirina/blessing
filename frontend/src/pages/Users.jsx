@@ -282,7 +282,6 @@ export default function Users() {
               { value: 'admin', label: 'Administrateur' },
               { value: 'secretaire', label: 'Secrétaire' },
               { value: 'enseignant', label: 'Enseignant' },
-              { value: 'etudiant', label: 'Étudiant' },
             ]}
             required
           />

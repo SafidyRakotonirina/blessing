@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Building,
+  House,
 } from 'lucide-react';
 import { useAuthStore } from '@/store';
 import { cn } from '@/utils/helpers';
@@ -59,6 +60,12 @@ export default function Sidebar({ onLogout }) {
       href: '/mes-cours',
       icon: BookOpen,
       roles: ['etudiant'],
+    },
+    {
+      name: 'Salles',
+      href: '/salles',
+      icon: House,
+      roles: ['admin', 'secretaire', 'enseignant', 'etudiant'],
     },
     {
       name: 'Référence',

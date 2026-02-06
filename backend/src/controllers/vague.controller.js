@@ -1,4 +1,3 @@
-import SalleModel from "../models/salle.model.js";
 import VagueModel from "../models/vague.model.js";
 import {
   asyncHandler,
@@ -31,7 +30,7 @@ export const getVagues = asyncHandler(async (req, res) => {
   );
 });
 
-// Obtenir une vague par ID
+// Obtenir une vague par ID (avec ses horaires)
 export const getVagueById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -44,7 +43,7 @@ export const getVagueById = asyncHandler(async (req, res) => {
   return successResponse(res, vague, "Vague récupérée avec succès");
 });
 
-// Créer une vague
+// Créer une vague avec plusieurs horaires
 export const createVague = asyncHandler(async (req, res) => {
   const {
     nom,
@@ -54,66 +53,61 @@ export const createVague = asyncHandler(async (req, res) => {
     date_debut,
     date_fin,
     statut,
-    remarques,
-    horaires, // Array de { jour_id, horaire_id }
+    horaires,
   } = req.body;
 
-  // Vérifier les disponibilités pour chaque horaire
-  if (horaires && horaires.length > 0) {
-    for (const horaire of horaires) {
-      // Vérifier la salle
-      if (salle_id) {
-        const salleDisponible = await SalleModel.checkDisponibilite(
-          salle_id,
-          horaire.jour_id,
-          horaire.horaire_id,
-        );
+  // Logs pour debug
+  console.log("Payload reçu :", req.body);
+  console.log("Horaires reçus :", horaires);
 
-        if (!salleDisponible) {
-          return errorResponse(
-            res,
-            `La salle est déjà occupée pour le créneau sélectionné`,
-            409,
-          );
-        }
-      }
+  // Validation des champs requis
+  if (!nom || !niveau_id || !date_debut || !date_fin) {
+    return errorResponse(
+      res,
+      "Les champs nom, niveau_id, date_debut et date_fin sont requis",
+      400,
+    );
+  }
 
-      // Vérifier l'enseignant
-      if (enseignant_id) {
-        const enseignantDisponible =
-          await VagueModel.checkEnseignantDisponibilite(
-            enseignant_id,
-            horaire.jour_id,
-            horaire.horaire_id,
-          );
+  // Vérification de la présence des horaires
+  if (!horaires || !Array.isArray(horaires) || horaires.length === 0) {
+    return errorResponse(res, "Au moins une plage horaire est requise", 400);
+  }
 
-        if (!enseignantDisponible) {
-          return errorResponse(
-            res,
-            `L'enseignant est déjà occupé pour le créneau sélectionné`,
-            409,
-          );
-        }
-      }
+  // Validation des horaires
+  for (const h of horaires) {
+    if (!h.heure_debut || !h.heure_fin) {
+      return errorResponse(
+        res,
+        "Chaque horaire doit avoir une heure de début et de fin",
+        400,
+      );
     }
   }
 
-  // Créer la vague
-  const vagueId = await VagueModel.create({
+  const vagueData = {
     nom,
     niveau_id,
-    enseignant_id,
-    salle_id,
+    enseignant_id: enseignant_id || null,
+    salle_id: salle_id || null,
     date_debut,
     date_fin,
-    statut,
-    remarques,
+    statut: statut || "planifie",
     horaires,
-  });
+  };
 
-  const vague = await VagueModel.findById(vagueId);
-
-  return successResponse(res, vague, "Vague créée avec succès", 201);
+  try {
+    const vagueId = await VagueModel.create(vagueData);
+    return successResponse(
+      res,
+      { id: vagueId },
+      "Vague créée avec succès",
+      201,
+    );
+  } catch (error) {
+    console.error("Erreur création vague:", error);
+    throw error;
+  }
 });
 
 // Mettre à jour une vague
@@ -127,75 +121,53 @@ export const updateVague = asyncHandler(async (req, res) => {
     date_debut,
     date_fin,
     statut,
-    remarques,
     horaires,
   } = req.body;
 
-  const existingVague = await VagueModel.findById(id);
-  if (!existingVague) {
+  // Vérifier que la vague existe
+  const vague = await VagueModel.findById(id);
+  if (!vague) {
     return errorResponse(res, "Vague introuvable", 404);
   }
 
-  // Vérifier les disponibilités si horaires fournis
-  if (horaires && horaires.length > 0) {
-    for (const horaire of horaires) {
-      if (salle_id) {
-        const salleDisponible = await SalleModel.checkDisponibilite(
-          salle_id,
-          horaire.jour_id,
-          horaire.horaire_id,
-          id,
+  // Construire l'objet de mise à jour
+  const updateData = {
+    nom,
+    niveau_id,
+    enseignant_id: enseignant_id || null,
+    salle_id: salle_id || null,
+    date_debut,
+    date_fin,
+    statut: statut || vague.statut,
+  };
+
+  // Ajouter les horaires s'ils sont fournis
+  if (horaires !== undefined) {
+    if (!Array.isArray(horaires)) {
+      return errorResponse(res, "Les horaires doivent être un tableau", 400);
+    }
+
+    // Validation des horaires
+    for (const h of horaires) {
+      if (!h.heure_debut || !h.heure_fin) {
+        return errorResponse(
+          res,
+          "Chaque horaire doit avoir une heure de début et de fin",
+          400,
         );
-
-        if (!salleDisponible) {
-          return errorResponse(
-            res,
-            `La salle est déjà occupée pour le créneau sélectionné`,
-            409,
-          );
-        }
-      }
-
-      if (enseignant_id) {
-        const enseignantDisponible =
-          await VagueModel.checkEnseignantDisponibilite(
-            enseignant_id,
-            horaire.jour_id,
-            horaire.horaire_id,
-            id,
-          );
-
-        if (!enseignantDisponible) {
-          return errorResponse(
-            res,
-            `L'enseignant est déjà occupé pour le créneau sélectionné`,
-            409,
-          );
-        }
       }
     }
+
+    updateData.horaires = horaires;
   }
 
-  const updateData = {};
-  if (nom) updateData.nom = nom;
-  if (niveau_id) updateData.niveau_id = niveau_id;
-  if (enseignant_id !== undefined) updateData.enseignant_id = enseignant_id;
-  if (salle_id !== undefined) updateData.salle_id = salle_id;
-  if (date_debut) updateData.date_debut = date_debut;
-  if (date_fin) updateData.date_fin = date_fin;
-  if (statut) updateData.statut = statut;
-  if (remarques !== undefined) updateData.remarques = remarques;
-  if (horaires !== undefined) updateData.horaires = horaires;
-
-  const updated = await VagueModel.update(id, updateData);
-
-  if (!updated) {
-    return errorResponse(res, "Erreur lors de la mise à jour", 400);
+  try {
+    await VagueModel.update(id, updateData);
+    return successResponse(res, null, "Vague mise à jour avec succès");
+  } catch (error) {
+    console.error("Erreur mise à jour vague:", error);
+    throw error;
   }
-
-  const vague = await VagueModel.findById(id);
-
-  return successResponse(res, vague, "Vague mise à jour avec succès");
 });
 
 // Supprimer une vague
@@ -207,7 +179,8 @@ export const deleteVague = asyncHandler(async (req, res) => {
     return errorResponse(res, "Vague introuvable", 404);
   }
 
-  if (parseInt(vague.nb_inscrits) > 0) {
+  // Vérifier s'il y a des inscriptions
+  if (vague.nb_inscrits > 0) {
     return errorResponse(
       res,
       "Impossible de supprimer une vague avec des inscriptions actives",
@@ -215,16 +188,16 @@ export const deleteVague = asyncHandler(async (req, res) => {
     );
   }
 
-  const deleted = await VagueModel.delete(id);
-
-  if (!deleted) {
-    return errorResponse(res, "Erreur lors de la suppression", 400);
+  try {
+    await VagueModel.delete(id);
+    return successResponse(res, null, "Vague supprimée avec succès");
+  } catch (error) {
+    console.error("Erreur suppression vague:", error);
+    throw error;
   }
-
-  return successResponse(res, null, "Vague supprimée avec succès");
 });
 
-// Obtenir le planning
+// Obtenir le planning général
 export const getPlanning = asyncHandler(async (req, res) => {
   const filters = {
     salle_id: req.query.salle_id,
@@ -244,44 +217,50 @@ export const getPlanningEnseignant = asyncHandler(async (req, res) => {
     enseignant_id: enseignantId,
   });
 
-  // Organiser par jour de la semaine
-  const planningParJour = {};
-
-  planning.forEach((vague) => {
-    vague.horaires.forEach((horaire) => {
-      const jour = horaire.jour_nom;
-      if (!planningParJour[jour]) {
-        planningParJour[jour] = [];
-      }
-
-      planningParJour[jour].push({
-        vague_id: vague.id,
-        vague_nom: vague.nom,
-        niveau: vague.niveau_code,
-        salle: vague.salle_nom,
-        heure_debut: horaire.heure_debut,
-        heure_fin: horaire.heure_fin,
-        nb_inscrits: vague.nb_inscrits,
-        capacite_max: vague.capacite_max,
-        statut: vague.statut,
-      });
-    });
-  });
-
-  // Trier les horaires par heure de début pour chaque jour
-  Object.keys(planningParJour).forEach((jour) => {
-    planningParJour[jour].sort((a, b) =>
-      a.heure_debut.localeCompare(b.heure_debut),
-    );
-  });
+  // Organiser par vague avec les horaires
+  const planningOrganise = planning.map((vague) => ({
+    vague_id: vague.id,
+    vague_nom: vague.nom,
+    niveau: vague.niveau_code,
+    salle: vague.salle_nom,
+    date_debut: vague.date_debut,
+    date_fin: vague.date_fin,
+    nb_inscrits: vague.nb_inscrits,
+    capacite_max: vague.capacite_max,
+    statut: vague.statut,
+    horaires: vague.horaires,
+  }));
 
   return successResponse(
     res,
     {
       enseignant_id: enseignantId,
-      planning_par_jour: planningParJour,
+      vagues: planningOrganise,
       total_vagues: planning.length,
     },
     "Planning de l'enseignant récupéré avec succès",
+  );
+});
+
+// Vérifier la capacité d'une vague
+export const checkCapacite = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const vague = await VagueModel.findById(id);
+  if (!vague) {
+    return errorResponse(res, "Vague introuvable", 404);
+  }
+
+  const capaciteDisponible = await VagueModel.checkCapacite(id);
+
+  return successResponse(
+    res,
+    {
+      capacite_max: vague.capacite_max,
+      nb_inscrits: vague.nb_inscrits,
+      places_disponibles: vague.capacite_max - vague.nb_inscrits,
+      capacite_disponible: capaciteDisponible,
+    },
+    "Capacité vérifiée",
   );
 });
