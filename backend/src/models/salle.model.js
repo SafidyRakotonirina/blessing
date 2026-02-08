@@ -7,7 +7,7 @@ class SalleModel {
 
     const [result] = await pool.execute(
       "INSERT INTO salles (nom, ecole_id, capacite, equipements) VALUES (?, ?, ?, ?)",
-      [nom, ecole_id, capacite, equipements || null],
+      [nom, ecole_id || null, capacite, equipements || null],
     );
 
     return result.insertId;
@@ -78,8 +78,21 @@ class SalleModel {
     return result.affectedRows > 0;
   }
 
-  // Supprimer (soft delete)
+  // Vérifier si utilisée
+  static async isUsed(id) {
+    const [rows] = await pool.execute(
+      "SELECT COUNT(*) as count FROM vagues WHERE salle_id = ?",
+      [id],
+    );
+
+    return rows[0].count > 0;
+  }
+
+  // Soft delete
   static async delete(id) {
+    if (await this.isUsed(id)) {
+      throw new Error("Salle utilisée dans des vagues");
+    }
     const [result] = await pool.execute(
       "UPDATE salles SET actif = FALSE WHERE id = ?",
       [id],
@@ -132,55 +145,14 @@ class SalleModel {
       "SELECT * FROM jours WHERE actif = TRUE ORDER BY ordre",
     );
 
-    // Créer une grille d'occupation
-    const grille = {};
-    tousLesJours.forEach((jour) => {
-      grille[jour.nom] = {};
-      tousLesHoraires.forEach((horaire) => {
-        grille[jour.nom][horaire.id] = {
-          libre: true,
-          vague: null,
-          horaire_libelle: horaire.libelle,
-          heure_debut: horaire.heure_debut,
-          heure_fin: horaire.heure_fin,
-        };
-      });
-    });
-
-    // Marquer les créneaux occupés
-    vaguesAvecHoraires.forEach((vague) => {
-      vague.horaires.forEach((horaire) => {
-        if (
-          grille[horaire.jour_nom] &&
-          grille[horaire.jour_nom][horaire.horaire_id]
-        ) {
-          grille[horaire.jour_nom][horaire.horaire_id] = {
-            libre: false,
-            vague: {
-              id: vague.id,
-              nom: vague.nom,
-              niveau_code: vague.niveau_code,
-              enseignant: vague.enseignant_nom
-                ? `${vague.enseignant_prenom} ${vague.enseignant_nom}`
-                : null,
-            },
-            horaire_libelle: horaire.horaire_libelle,
-            heure_debut: horaire.heure_debut,
-            heure_fin: horaire.heure_fin,
-          };
-        }
-      });
-    });
-
     return {
       vagues: vaguesAvecHoraires,
-      grille,
       jours: tousLesJours,
       horaires: tousLesHoraires,
     };
   }
 
-  // Vérifier si une salle est disponible pour un créneau donné
+  // Vérifier la disponibilité d'une salle pour un créneau
   static async checkDisponibilite(
     salleId,
     jourId,
@@ -234,7 +206,7 @@ class SalleModel {
       params.push(capaciteMin);
     }
 
-    query += " ORDER BY s.capacite, s.nom";
+    query += " ORDER BY s.capacite DESC, s.nom";
 
     const [rows] = await pool.execute(query, params);
     return rows;

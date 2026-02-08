@@ -5,9 +5,13 @@ class HoraireModel {
   static async create(horaireData) {
     const { heure_debut, heure_fin, libelle } = horaireData;
 
+    if (heure_debut >= heure_fin) {
+      throw new Error("heure_fin doit être après heure_debut");
+    }
+
     const [result] = await pool.execute(
       "INSERT INTO horaires (heure_debut, heure_fin, libelle) VALUES (?, ?, ?)",
-      [heure_debut, heure_fin, libelle],
+      [heure_debut, heure_fin, libelle || null],
     );
 
     return result.insertId;
@@ -61,8 +65,11 @@ class HoraireModel {
     return result.affectedRows > 0;
   }
 
-  // Supprimer (soft delete)
+  // Soft delete
   static async delete(id) {
+    if (await this.isUsed(id)) {
+      throw new Error("Horaire utilisé dans des vagues");
+    }
     const [result] = await pool.execute(
       "UPDATE horaires SET actif = FALSE WHERE id = ?",
       [id],

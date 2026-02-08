@@ -8,13 +8,21 @@ import {
 
 // Obtenir tous les utilisateurs
 export const getUsers = asyncHandler(async (req, res) => {
+  const { role, actif, search, page, limit } = req.query;
+
   const filters = {
-    role: req.query.role,
-    actif: req.query.actif,
-    search: req.query.search,
-    page: req.query.page || 1,
-    limit: req.query.limit || 10,
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 10,
   };
+
+  // On ignore explicitement les chaînes vides
+  if (role && role.trim() !== "") filters.role = role;
+  if (search && search.trim() !== "") filters.search = search;
+  
+  if (actif !== undefined && actif !== "") {
+    filters.actif = actif === "true";
+  }
+
 
   const result = await UserModel.findAll(filters);
 

@@ -52,62 +52,30 @@ export const createVague = asyncHandler(async (req, res) => {
     salle_id,
     date_debut,
     date_fin,
-    statut,
-    horaires,
+    statut = 'planifie',
+    horaires   // ← tableau [ {jour_id, horaire_id}, ... ]
   } = req.body;
 
-  // Logs pour debug
-  console.log("Payload reçu :", req.body);
-  console.log("Horaires reçus :", horaires);
-
-  // Validation des champs requis
   if (!nom || !niveau_id || !date_debut || !date_fin) {
-    return errorResponse(
-      res,
-      "Les champs nom, niveau_id, date_debut et date_fin sont requis",
-      400,
-    );
+    return errorResponse(res, 'nom, niveau_id, date_debut, date_fin requis', 400);
   }
 
-  // Vérification de la présence des horaires
-  if (!horaires || !Array.isArray(horaires) || horaires.length === 0) {
-    return errorResponse(res, "Au moins une plage horaire est requise", 400);
+  if (!Array.isArray(horaires) || horaires.length === 0) {
+    return errorResponse(res, 'horaires (tableau) obligatoire', 400);
   }
 
-  // Validation des horaires
-  for (const h of horaires) {
-    if (!h.heure_debut || !h.heure_fin) {
-      return errorResponse(
-        res,
-        "Chaque horaire doit avoir une heure de début et de fin",
-        400,
-      );
-    }
-  }
-
-  const vagueData = {
+  const vagueId = await VagueModel.create({
     nom,
     niveau_id,
     enseignant_id: enseignant_id || null,
     salle_id: salle_id || null,
     date_debut,
     date_fin,
-    statut: statut || "planifie",
-    horaires,
-  };
+    statut,
+    horaires   // attend un tableau [{jour_id, horaire_id}]
+  });
 
-  try {
-    const vagueId = await VagueModel.create(vagueData);
-    return successResponse(
-      res,
-      { id: vagueId },
-      "Vague créée avec succès",
-      201,
-    );
-  } catch (error) {
-    console.error("Erreur création vague:", error);
-    throw error;
-  }
+  return successResponse(res, { id: vagueId }, 'Vague créée', 201);
 });
 
 // Mettre à jour une vague

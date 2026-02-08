@@ -1,4 +1,4 @@
-import { pool } from '../config/database.js';
+import { pool } from "../config/database.js";
 
 class NiveauModel {
   // Créer un niveau
@@ -10,13 +10,21 @@ class NiveauModel {
       frais_inscription = 0,
       frais_ecolage = 0,
       frais_livre = 0,
-      duree_mois = 2
+      duree_mois = 2,
     } = niveauData;
 
     const [result] = await pool.execute(
       `INSERT INTO niveaux (code, nom, description, frais_inscription, frais_ecolage, frais_livre, duree_mois)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [code, nom, description, frais_inscription, frais_ecolage, frais_livre, duree_mois]
+      [
+        code,
+        nom,
+        description,
+        frais_inscription,
+        frais_ecolage,
+        frais_livre,
+        duree_mois,
+      ],
     );
 
     return result.insertId;
@@ -24,41 +32,39 @@ class NiveauModel {
 
   // Trouver un niveau par ID
   static async findById(id) {
-    const [rows] = await pool.execute(
-      'SELECT * FROM niveaux WHERE id = ?',
-      [id]
-    );
+    const [rows] = await pool.execute("SELECT * FROM niveaux WHERE id = ?", [
+      id,
+    ]);
 
     return rows[0];
   }
 
   // Trouver un niveau par code
   static async findByCode(code) {
-    const [rows] = await pool.execute(
-      'SELECT * FROM niveaux WHERE code = ?',
-      [code]
-    );
+    const [rows] = await pool.execute("SELECT * FROM niveaux WHERE code = ?", [
+      code,
+    ]);
 
     return rows[0];
   }
 
   // Obtenir tous les niveaux
   static async findAll(filters = {}) {
-    let query = 'SELECT * FROM niveaux WHERE 1=1';
+    let query = "SELECT * FROM niveaux WHERE 1=1";
     const params = [];
 
     if (filters.actif !== undefined) {
-      query += ' AND actif = ?';
+      query += " AND actif = ?";
       params.push(filters.actif);
     }
 
     if (filters.search) {
-      query += ' AND (code LIKE ? OR nom LIKE ?)';
+      query += " AND (code LIKE ? OR nom LIKE ?)";
       const searchTerm = `%${filters.search}%`;
       params.push(searchTerm, searchTerm);
     }
 
-    query += ' ORDER BY code';
+    query += " ORDER BY code";
 
     const [rows] = await pool.execute(query, params);
     return rows;
@@ -69,8 +75,8 @@ class NiveauModel {
     const fields = [];
     const values = [];
 
-    Object.keys(niveauData).forEach(key => {
-      if (niveauData[key] !== undefined && key !== 'id') {
+    Object.keys(niveauData).forEach((key) => {
+      if (niveauData[key] !== undefined && key !== "id") {
         fields.push(`${key} = ?`);
         values.push(niveauData[key]);
       }
@@ -83,29 +89,32 @@ class NiveauModel {
     values.push(id);
 
     const [result] = await pool.execute(
-      `UPDATE niveaux SET ${fields.join(', ')} WHERE id = ?`,
-      values
+      `UPDATE niveaux SET ${fields.join(", ")} WHERE id = ?`,
+      values,
     );
 
     return result.affectedRows > 0;
   }
 
-  // Supprimer un niveau (vérifier d'abord s'il n'est pas utilisé)
-  static async delete(id) {
-    // Vérifier si le niveau est utilisé dans des vagues
-    const [vagues] = await pool.execute(
-      'SELECT COUNT(*) as count FROM vagues WHERE niveau_id = ?',
-      [id]
+  // Vérifier si utilisé
+  static async isUsed(id) {
+    const [rows] = await pool.execute(
+      "SELECT COUNT(*) as count FROM vagues WHERE niveau_id = ?",
+      [id],
     );
 
-    if (vagues[0].count > 0) {
-      throw new Error('Ce niveau est utilisé dans des vagues et ne peut pas être supprimé');
+    return rows[0].count > 0;
+  }
+
+  // Supprimer un niveau (hard delete si non utilisé)
+  static async delete(id) {
+    if (await this.isUsed(id)) {
+      throw new Error("Niveau utilisé dans des vagues");
     }
 
-    const [result] = await pool.execute(
-      'DELETE FROM niveaux WHERE id = ?',
-      [id]
-    );
+    const [result] = await pool.execute("DELETE FROM niveaux WHERE id = ?", [
+      id,
+    ]);
 
     return result.affectedRows > 0;
   }
@@ -137,8 +146,8 @@ class NiveauModel {
   // Calculer le coût total pour un niveau
   static async getTotalCost(id) {
     const [rows] = await pool.execute(
-      'SELECT (frais_inscription + frais_ecolage + frais_livre) as total FROM niveaux WHERE id = ?',
-      [id]
+      "SELECT (frais_inscription + frais_ecolage + frais_livre) as total FROM niveaux WHERE id = ?",
+      [id],
     );
 
     return rows[0]?.total || 0;

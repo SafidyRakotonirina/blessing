@@ -46,6 +46,6 @@ export const sanitizeInput = (input) => {
   
   return input
     .trim()
-    .replace(/[<>]/g, '') // Supprimer < et >
-    .substring(0, 1000); // Limiter la longueur
+    .replace(/[<>]/g, '') 
+    .substring(0, 1000); 
 };

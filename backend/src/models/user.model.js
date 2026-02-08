@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "../config/database.js";
 
 class UserModel {
-  // Créer un utilisateur
+  // Créer un utilisateur (étudiant par défaut si role non spécifié)
   static async create(userData) {
     const {
       nom,
@@ -47,7 +47,7 @@ class UserModel {
     return rows[0];
   }
 
-  // Trouver un utilisateur par ID
+  // Trouver un utilisateur par ID (exclut password et refresh_token)
   static async findById(id) {
     const [rows] = await pool.execute(
       "SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at FROM utilisateurs WHERE id = ?",
@@ -65,75 +65,59 @@ class UserModel {
     return rows[0];
   }
 
-  // Obtenir tous les utilisateurs avec filtres
+  // Obtenir tous les utilisateurs avec filtres (inclut étudiants via role)
   static async findAll(filters = {}) {
-    let query = `
-    SELECT id, nom, prenom, email, telephone, role, photo_url, actif, created_at
-    FROM utilisateurs
-    WHERE 1=1
-  `;
-    const params = [];
+  const { role, actif, search, page = 1, limit = 10 } = filters;
+  const offset = (page - 1) * limit;
+  const params = [];
+  let whereClause = "";
 
-    if (filters.role) {
-      query += " AND role = ?";
-      params.push(filters.role);
-    }
-
-    if (filters.actif === 'true' || filters.actif === 'false') {
-  const actifValue = filters.actif === 'true' ? 1 : 0;
-  query += " AND actif = ?";
-  params.push(actifValue);
-}
-
-    if (filters.search) {
-      query += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
-      const searchTerm = `%${filters.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm);
-    }
-
-    // Pagination
-    const page = Math.max(1, Number(filters.page) || 1);
-    const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
-    const offset = (page - 1) * limit;
-
-    query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
-
-    try {
-      const [rows] = await pool.execute(query, params);
-
-      // Compter le total
-      let countQuery = "SELECT COUNT(*) as total FROM utilisateurs WHERE 1=1";
-      const countParams = [];
-
-      if (filters.role) {
-        countQuery += " AND role = ?";
-        countParams.push(filters.role);
-      }
-
-      if (filters.actif !== undefined) {
-        countQuery += " AND actif = ?";
-        countParams.push(filters.actif);
-      }
-
-      if (filters.search) {
-        countQuery += " AND (nom LIKE ? OR prenom LIKE ? OR email LIKE ?)";
-        const searchTerm = `%${filters.search}%`;
-        countParams.push(searchTerm, searchTerm, searchTerm);
-      }
-
-      const [countResult] = await pool.execute(countQuery, countParams);
-
-      return {
-        users: rows,
-        total: countResult[0].total,
-        page,
-        limit,
-      };
-    } catch (err) {
-      console.error("Erreur dans UserModel.findAll:", err);
-      throw err;
-    }
+  // Correction des filtres avec l'alias u.
+  if (role) {
+    whereClause += " AND u.role = ?";
+    params.push(role);
   }
+  if (actif !== undefined) {
+    whereClause += " AND u.actif = ?";
+    params.push(actif);
+  }
+  if (search) {
+    whereClause += " AND (u.nom LIKE ? OR u.prenom LIKE ? OR u.email LIKE ?)";
+    const searchParam = `%${search}%`;
+    params.push(searchParam, searchParam, searchParam);
+  }
+
+  // La requête avec u.id pour lever l'ambiguïté
+  const sql = `
+    SELECT 
+      u.id, u.nom, u.prenom, u.email, u.telephone, u.role, u.photo_url, u.actif, u.created_at,
+      COUNT(DISTINCT i.id) as nb_inscriptions,
+      COUNT(DISTINCT CASE WHEN i.statut = 'actif' THEN i.id END) as nb_inscriptions_actives
+    FROM utilisateurs u
+    LEFT JOIN inscriptions i ON u.id = i.etudiant_id
+    WHERE 1=1 ${whereClause}
+    GROUP BY u.id
+    ORDER BY u.created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  // On ajoute les params pour la pagination
+  const queryParams = [...params, parseInt(limit), parseInt(offset)];
+  const [users] = await pool.execute(sql, queryParams);
+
+  // Requête pour le total (nécessaire pour la pagination)
+  const [totalResult] = await pool.execute(
+    `SELECT COUNT(*) as count FROM utilisateurs u WHERE 1=1 ${whereClause}`,
+    params
+  );
+
+  return {
+    users,
+    total: totalResult[0].count,
+    page: parseInt(page),
+    limit: parseInt(limit)
+  };
+}
 
   // Mettre à jour un utilisateur
   static async update(id, userData) {
@@ -193,8 +177,24 @@ class UserModel {
     return result.affectedRows > 0;
   }
 
-  // Supprimer un utilisateur (hard delete - à utiliser avec précaution)
+  // Vérifier si utilisé avant hard delete
+  static async isUsed(id) {
+    const [rows] = await pool.execute(
+      `SELECT COUNT(*) as count FROM inscriptions WHERE etudiant_id = ?
+       UNION SELECT COUNT(*) FROM vagues WHERE enseignant_id = ?
+       UNION SELECT COUNT(*) FROM paiements WHERE utilisateur_id = ?`,
+      [id, id, id],
+    );
+    return rows.some((r) => r.count > 0);
+  }
+
+  // Supprimer un utilisateur (hard delete - si non utilisé)
   static async delete(id) {
+    if (await this.isUsed(id)) {
+      throw new Error(
+        "Utilisateur utilisé dans des inscriptions/vagues/paiements",
+      );
+    }
     const [result] = await pool.execute(
       "DELETE FROM utilisateurs WHERE id = ?",
       [id],
@@ -253,7 +253,7 @@ class UserModel {
     return stats;
   }
 
-  // Obtenir les enseignants disponibles
+  // Obtenir les enseignants disponibles pour un créneau
   static async getAvailableTeachers(jourId, horaireId, excludeVagueId = null) {
     let query = `
       SELECT DISTINCT u.id, u.nom, u.prenom, u.email, u.telephone
@@ -263,8 +263,9 @@ class UserModel {
         AND u.id NOT IN (
           SELECT v.enseignant_id 
           FROM vagues v
-          WHERE v.jour_id = ? 
-            AND v.horaire_id = ?
+          JOIN vague_horaires vh ON v.id = vh.vague_id
+          WHERE vh.jour_id = ? 
+            AND vh.horaire_id = ?
             AND v.statut IN ('planifie', 'en_cours')
     `;
 

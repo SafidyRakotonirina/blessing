@@ -6,52 +6,40 @@ import { asyncHandler } from '../utils/response.js';
 // Créer une inscription complète (inscription directe)
 export const createInscriptionComplete = asyncHandler(async (req, res) => {
   const {
-    // Étudiant
+    etudiant_id,          // prioritaire si fourni
     etudiant_nom,
     etudiant_prenom,
     etudiant_telephone,
     etudiant_email,
-    etudiant_id,
-    // Vague
     vague_id,
-    // Paiements
-    frais_inscription_paye,
-    montant_ecolage_initial,
-    livre1_paye,
-    livre2_paye,
+    frais_inscription_paye = false,
+    montant_ecolage_initial = 0,
     remarques
   } = req.body;
 
-  // Vérifier si la vague existe et a de la place
+  if (!vague_id) return errorResponse(res, 'vague_id obligatoire', 400);
+
   const vague = await VagueModel.findById(vague_id);
-  if (!vague) {
-    return errorResponse(res, 'Vague introuvable', 404);
-  }
+  if (!vague) return errorResponse(res, 'Vague introuvable', 404);
 
-  const capaciteDisponible = await VagueModel.checkCapacite(vague_id);
-  if (!capaciteDisponible) {
-    return errorResponse(res, 'Cette vague a atteint sa capacité maximale', 400);
-  }
+  const dispo = await VagueModel.checkCapacite(vague_id);
+  if (!dispo) return errorResponse(res, 'Vague complète', 400);
 
-  // Créer l'inscription complète
   const result = await InscriptionModel.createComplete({
+    etudiant_id,
     etudiant_nom,
     etudiant_prenom,
     etudiant_telephone,
     etudiant_email,
-    etudiant_id,
     vague_id,
     date_inscription: new Date().toISOString().split('T')[0],
-    frais_inscription_paye: frais_inscription_paye || false,
-    montant_ecolage_initial: montant_ecolage_initial || 0,
-    livre1_paye: livre1_paye || false,
-    livre2_paye: livre2_paye || false,
-    remarques
+    frais_inscription_paye,
+    montant_ecolage_initial: parseFloat(montant_ecolage_initial) || 0,
+    remarques,
+    created_by: req.user?.id
   });
 
-  const inscription = await InscriptionModel.findById(result.inscriptionId);
-
-  return successResponse(res, inscription, 'Inscription créée avec succès', 201);
+  return successResponse(res, result, 'Inscription créée', 201);
 });
 
 // Obtenir les détails d'une inscription
